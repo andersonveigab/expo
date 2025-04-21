@@ -1,160 +1,156 @@
----
-title: create-expo-app
-maxHeadingDepth: 4
-description: A command-line tool to create a new Expo and React Native project.
----
+// Estrutura inicial do app Move Cidade (React Native + Expo + OpenRouteService)
 
-import { Terminal } from '~/ui/components/Snippet';
-import { Tab, Tabs } from '~/ui/components/Tabs';
+import React, { useState } from "react";
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from "react-native";
+import MapView, { Marker } from "react-native-maps";
 
-`create-expo-app` is a command-line tool to create and set up a new Expo and React Native project. This tool simplifies the initialization process by providing various templates to get started quickly without the need for manual configuration.
+const ORS_API_KEY = "5b3ce3597851110001cf62480bbfd6d799c74196a783963e56fb4ced"; // Substitua pela sua chave da OpenRouteService
 
-## Create a new project
+export default function App() {
+  const [pickup, setPickup] = useState("");
+  const [destination, setDestination] = useState("");
+  const [distanceKm, setDistanceKm] = useState(0);
 
-To create a new project, run the following command:
+  const calcularPrecoCorrida = (distancia) => {
+    if (distancia <= 4) return 8;
+    return 8 + (distancia - 4) * 2;
+  };
 
-<Tabs>
+  const pedirViagem = async () => {
+    if (!pickup || !destination) {
+      Alert.alert("Erro", "Informe partida e destino");
+      return;
+    }
 
-<Tab label="npm">
+    try {
+      const coordsOrigem = await buscarCoordenadas(pickup);
+      const coordsDestino = await buscarCoordenadas(destination);
 
-<Terminal cmd={['$ npx create-expo-app@latest']} />
+      const distanciaKm = await calcularDistancia(coordsOrigem, coordsDestino);
+      setDistanceKm(distanciaKm);
 
-</Tab>
+      const preco = calcularPrecoCorrida(distanciaKm);
+      const taxaApp = preco * 0.10;
+      const motoristaRecebe = preco - taxaApp;
 
-<Tab label="Yarn">
+      Alert.alert(
+        "Resumo da Corrida",
+        `Distância estimada: ${distanciaKm.toFixed(2)} km\nPreço da corrida: R$ ${preco.toFixed(2)}\nTaxa do app: R$ ${taxaApp.toFixed(2)}\nMotorista recebe: R$ ${motoristaRecebe.toFixed(2)}`
+      );
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Erro", "Não foi possível calcular a rota");
+    }
+  };
 
-<Terminal cmd={['$ yarn create expo-app']} />
+  const buscarCoordenadas = async (endereco) => {
+    const response = await fetch(
+      `https://api.openrouteservice.org/geocode/search?api_key=${ORS_API_KEY}&text=${encodeURIComponent(endereco)}&boundary.country=BR`
+    );
+    const data = await response.json();
+    if (data.features.length === 0) throw new Error("Endereço não encontrado");
+    return data.features[0].geometry.coordinates;
+  };
 
-</Tab>
+  const calcularDistancia = async (coordOrigem, coordDestino) => {
+    const response = await fetch("https://api.openrouteservice.org/v2/directions/driving-car/geojson", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: ORS_API_KEY,
+      },
+      body: JSON.stringify({
+        coordinates: [coordOrigem, coordDestino],
+      }),
+    });
+    const data = await response.json();
+    const distanciaMetros = data.features[0].properties.summary.distance;
+    return distanciaMetros / 1000; // converter para km
+  };
 
-<Tab label="pnpm">
-
-<Terminal cmd={['$ pnpm create expo-app']} />
-
-</Tab>
-
-<Tab label="Bun">
-
-<Terminal cmd={['$ bun create expo']} />
-
-</Tab>
-
-</Tabs>
-
-Running the above command will prompt you to enter the app name of your project. This app name is also used in the app config's [`name`](/versions/latest/config/app/#name) property.
-
-<Terminal cmd={['What is your app named? my-app']} />
-
-## Options
-
-Uses the following options to customize the command behavior.
-
-### `--yes`
-
-Uses the default options to create a new project.
-
-### `--no-install`
-
-Skips installing npm dependencies or CocoaPods.
-
-### `--template`
-
-Running `create-expo-app` with a [Node Package Manager](#node-package-managers-support) initializes and sets up a new Expo project using the default template.
-
-You can use the `--template` option to select one of the following templates or pass it as an argument to the option. For example, `--template default`.
-
-| Template                                                                                              | Description                                                                                                                                                                           |
-| ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`default`](https://github.com/expo/expo/tree/main/templates/expo-template-default)                   | Default template. Designed to build multi-screen apps. Includes recommended tools such as Expo CLI, Expo Router library and TypeScript configuration enabled. Suitable for most apps. |
-| [`blank`](https://github.com/expo/expo/tree/main/templates/expo-template-blank)                       | Installs minimum required npm dependencies without configuring navigation.                                                                                                            |
-| [`blank-typescript`](https://github.com/expo/expo/tree/main/templates/expo-template-blank-typescript) | A Blank template with TypeScript enabled.                                                                                                                                             |
-| [`tabs`](https://github.com/expo/expo/tree/main/templates/expo-template-tabs)                         | Installs and configures file-based routing with Expo Router and TypeScript enabled.                                                                                                   |
-| [`bare-minimum`](https://github.com/expo/expo/tree/main/templates/expo-template-bare-minimum)         | A Blank template with native directories (**android** and **ios**) generated. Runs [`npx expo prebuild`](/workflow/prebuild/) during the setup.                                       |
-
-### `--example`
-
-Use this option to initialize a project using an example from [expo/examples](https://github.com/expo/examples).
-
-For example, running `npx create-expo-app --example with-router` will set up a project with Expo Router library.
-
-### `--version`
-
-Prints the version number and exits.
-
-### `--help`
-
-Prints the list of available options and exits.
-
-## Node Package Managers support
-
-Creating a new project with `create-expo-app` also handles setting up additional configuration needed for a specific Node Package Manager.
-
-**If you are migrating from one package manager to another**, you've to manually carry out the additional configuration in your project. **If you are using [EAS](/eas/)**, you also have to configure your project for any additional required steps manually.
-
-All the additional steps for each package manager are listed below.
-
-### npm
-
-#### Local installation
-
-npm is installed as part of Node.js installation. See [Node.js documentation](https://nodejs.org/en/download/package-manager) for installation instructions.
-
-#### EAS installation
-
-Supported by default if the project directory contains **package-lock.json**.
-
-### Yarn 1 (Classic)
-
-#### Local installation
-
-Yarn 1 (Classic) is usually installed as a global dependency of npm. See [Yarn 1 documentation](https://classic.yarnpkg.com/en/docs/getting-started) for installation instructions.
-
-#### EAS installation
-
-Supported by default if the project directory contains **yarn.lock**.
-
-### Yarn 2+ (Modern)
-
-#### Local installation
-
-See [Yarn documentation](https://yarnpkg.com/getting-started/install) for installation instructions.
-
-Yarn 2+ handles package management differently than Yarn 1. One of the core changes in Yarn 2+ is the [Plug'n'Play (PnP)](https://yarnpkg.com/features/pnp) node linking model that does not work with React Native.
-
-By default, a project created with `create-expo-app` and Yarn 2+ uses [`nodeLinker`](https://yarnpkg.com/features/linkers#nodelinker-node-modules) with its value set to `node-modules` to install dependencies.
-
-```yml .yarnrc.yml
-nodeLinker: node-modules
-```
-
-#### EAS installation
-
-Yarn Modern on EAS requires adding [`eas-build-pre-install` hook](/build-reference/npm-hooks/). In your project's **package.json**, add the following configuration:
-
-```json package.json
-{
-  "scripts": {
-    "eas-build-pre-install": "corepack enable && yarn set version 4"
-  }
+  return (
+    <View style={styles.container}>
+      <Text style={styles.logo}>Move Cidade</Text>
+      <Text style={styles.welcome}>Bem-vindo!</Text>
+      <MapView
+        style={styles.map}
+        initialRegion={{
+          latitude: -22.1256,
+          longitude: -51.3889,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        }}
+      >
+        <Marker
+          coordinate={{ latitude: -22.1256, longitude: -51.3889 }}
+          title="Você está aqui"
+        />
+      </MapView>
+      <TextInput
+        style={styles.input}
+        placeholder="Informe o local de partida"
+        value={pickup}
+        onChangeText={setPickup}
+      />
+      <TextInput
+        style={styles.input}
+        placeholder="Informe o destino"
+        value={destination}
+        onChangeText={setDestination}
+      />
+      <TouchableOpacity style={styles.button} onPress={pedirViagem}>
+        <Text style={styles.buttonText}>Pedir viagem</Text>
+      </TouchableOpacity>
+      <Text style={styles.loginText}>Entrar ou Registrar</Text>
+    </View>
+  );
 }
-```
 
-### pnpm
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    paddingTop: 60,
+    paddingHorizontal: 20,
+    backgroundColor: '#fff',
+  },
+  logo: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  welcome: {
+    fontSize: 20,
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  map: {
+    width: '100%',
+    height: 200,
+    borderRadius: 10,
+  },
+  input: {
+    height: 40,
+    borderColor: '#ccc',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    marginTop: 10,
+  },
+  button: {
+    backgroundColor: '#000',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 15,
+    alignItems: 'center',
+  },
+  buttonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  loginText: {
+    textAlign: 'center',
+    marginTop: 20,
+    color: '#555',
+  },
+});
 
-#### Local installation
-
-Requires installing Node.js. See [pnpm documentation](https://pnpm.io/installation) for installation instructions.
-
-By default, a project created with `create-expo-app` and pnpm uses [`node-linker`](https://pnpm.io/npmrc#node-linker) with its value set to `hoisted` to install dependencies.
-
-```ini .npmrc
-node-linker=hoisted
-```
-
-#### EAS installation
-
-Supported by default if the project directory contains **pnpm-lock.yaml**.
-
-### Bun
-
-See [Bun](/guides/using-bun/) guide for details on creating a new Expo project with `bun`, migration from another package manager, and usage with EAS.
